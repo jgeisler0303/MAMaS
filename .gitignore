@@ -1,0 +1,34 @@
+# MATLAB
+*.asv
+*.m~
+*.mat
+*.mex*
+*.p
+*.slx.autosave
+
+# Simulink
+slprj/
+*.slxc
+
+# MATLAB cache
+.matlabroot/
+*.cache
+
+# OS
+.DS_Store
+Thumbs.db
+.directory
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build
+build/
+dist/
+*.o
+*.a
+*.so
