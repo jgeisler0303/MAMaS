@@ -1,6 +1,6 @@
 % Extended test for MaximaExpression
 
-maxima = MaximaInterface.getInstance();
+maxima = MaximaInterface.getInstance(); %#ok<NASGU>
 
 % Basic symbols
 x = MaximaExpression('x');
@@ -74,6 +74,44 @@ assert(Mt3.isMatrix, 'Expected ctranspose result to be a matrix.');
 depends(y, x);
 depends(y, [x, t]);
 
-fprintf('All tests passed!\n');
+% Test diff (differentiation)
+fprintf('\nTesting diff()...\n');
+expr_diff = x^3 + 2*x^2 + x;
+dx = diff(expr_diff, x);
+assert(isa(dx, 'MaximaExpression'), 'Expected diff result to be MaximaExpression.');
+dxx = diff(expr_diff, x, 2);  % Second derivative
+assert(isa(dxx, 'MaximaExpression'), 'Expected second derivative to be MaximaExpression.');
+fprintf('  diff() tests passed!\n');
+
+% Test jacobian
+fprintf('Testing jacobian()...\n');
+f1 = x^2 + y;
+f2 = x*y + x;
+jac = jacobian([f1, f2], [x, y]);
+assert(jac.isMatrix, 'Expected jacobian result to be a matrix.');
+assert(jac.matrixRows == 2 && jac.matrixCols == 2, 'Jacobian dimensions should be 2x2.');
+fprintf('  jacobian() tests passed!\n');
+
+% Test subs (substitution)
+fprintf('Testing subs()...\n');
+expr_subs = x^2 + y^2;
+result_subs = subs(expr_subs, x, 2);
+assert(isa(result_subs, 'MaximaExpression'), 'Expected subs result to be MaximaExpression.');
+% Substitute multiple variables
+result_subs2 = subs(expr_subs, [x, y], [2, 3]);
+assert(isa(result_subs2, 'MaximaExpression'), 'Expected multi-subs result to be MaximaExpression.');
+fprintf('  subs() tests passed!\n');
+
+% Test symvar (find symbolic variables)
+fprintf('Testing symvar()...\n');
+expr_symvar = x^2 + y*sin(t) + 5;
+vars = symvar(expr_symvar);
+assert(isstring(vars) || ischar(vars), 'Expected symvar to return string array or char.');
+% Should find x, y, t (and possibly sin as a function)
+fprintf('  Found variables: ');
+disp(vars);
+fprintf('  symvar() tests passed!\n');
+
+fprintf('\nAll tests passed!\n');
 
 clear maxima;

@@ -83,7 +83,7 @@ classdef MaximaExpression < handle
         end
 
         function s = char(obj)
-            if numel(obj) == 1
+            if isscalar(obj)
                 s = obj.getDisplayString();
             else
                 % For arrays, create cell array of strings
@@ -92,7 +92,7 @@ classdef MaximaExpression < handle
         end
 
         function s = string(obj)
-            if numel(obj) == 1
+            if isscalar(obj)
                 s = string(obj.getDisplayString());
             else
                 % For arrays, create string array
@@ -101,7 +101,7 @@ classdef MaximaExpression < handle
         end
 
         function disp(obj)
-            if numel(obj) == 1
+            if isscalar(obj)
                 disp(obj.getDisplayString());
             else
                 % For arrays, display size and elements
@@ -279,9 +279,7 @@ classdef MaximaExpression < handle
             y = MaximaExpression.funcOp('conjugate', obj);
             if obj.isMatrix
                 % Transpose the Maxima matrix
-                y = obj.matrixTranspose();
-            else
-                y = obj;
+                y = y.matrixTranspose();
             end
         end
 
@@ -412,6 +410,228 @@ classdef MaximaExpression < handle
             cmd = ['trigsimp(ratsimp(', exprX, '))']; 
             id = maxima.sendNoWait(cmd);
             y = MaximaExpression.fromId(id, maxima);
+        end
+
+        function y = diff(x, var, n)
+            arguments
+                x (1,1) MaximaExpression
+                var (1,1) MaximaExpression
+                n (1,1) double {mustBeInteger, mustBePositive} = 1
+            end
+            % Differentiate expression with respect to a variable
+            % y = diff(expr, var)      - first derivative
+            % y = diff(expr, var, n)   - nth derivative
+            if ~isscalar(x) || ~isscalar(var)
+                error('Operations with matrices of MaximaExpressions are not supported. Please consider using symbolic matrices instead.');
+            end
+            
+            if ~var.isSymbol || var.isMatrix
+                error('The variable argument must be a MaximaExpression scalar symbol.');
+            end
+            if n==1
+                y = MaximaExpression.func('diff', x, var);
+            else
+                y = MaximaExpression.func('diff', x, var, n);
+            end
+            if x.isMatrix
+                y.isMatrix = true;
+                y.matrixRows = x.matrixRows;
+                y.matrixCols = x.matrixCols;
+            end
+        end
+
+        function y = jacobian(exprs, vars)
+            arguments
+                exprs MaximaExpression
+                vars MaximaExpression
+            end
+            % Compute Jacobian matrix (matrix of partial derivatives)
+            % y = jacobian(exprs, vars)   - Jacobian of expressions w.r.t. variables
+            % exprs: symbolic expressions
+            % vars:  symbols
+            
+            if isscalar(exprs)
+                if exprs.isMatrix
+                    exprsStr = ['flatten(args(', exprs.identifier, '))'];
+                    numRows = exprs.matrixRows*exprs.matrixCols;
+                else
+                    exprsStr = ['[', exprs.identifier, ']'];
+                    numRows = 1;
+                end
+                maxima = exprs.maximaInstance;
+            else
+                if any(arrayfun(@(e) e.isMatrix, exprs))
+                    error('All elements in exprs must be scalar MaximaExpressions.');
+                end
+                maxima = exprs(1).maximaInstance;
+                for i = 2:numel(exprs)
+                    if exprs(i).maximaInstance ~= maxima
+                        error('All MaximaExpression arguments must belong to the same Maxima instance.');
+                    end
+                end
+                exprsStr = ['[', strjoin(arrayfun(@(e) e.identifier, exprs(:), 'UniformOutput', false), ', '), ']'];
+                numRows = numel(exprs);
+            end
+
+            if isempty(vars)
+                error('vars cannot be empty.');
+            end
+            if isscalar(vars)
+                if vars.maximaInstance ~= maxima
+                    error('All MaximaExpression arguments must belong to the same Maxima instance.');
+                end
+                if vars.isMatrix
+                    error('vars cannot be a matrix MaximaExpression.');
+                end
+                if ~vars.isSymbol
+                    error('vars must be a scalar MaximaExpression symbol.');
+                end
+
+                varsStr = ['[', vars.identifier, ']'];
+                numCols = 1;
+            else
+                for i = 1:numel(vars)
+                    if vars(i).maximaInstance ~= maxima
+                        error('All MaximaExpression arguments must belong to the same Maxima instance.');
+                    end
+                end
+                if any(arrayfun(@(v) v.isMatrix, vars))
+                    error('All elements in vars must be scalar MaximaExpressions.');
+                end
+                if any(arrayfun(@(v) ~v.isSymbol, vars))
+                    error('All elements in vars must be scalar MaximaExpression symbols.');
+                end
+                
+                varsStr = ['[', strjoin(arrayfun(@(v) v.identifier, vars(:), 'UniformOutput', false), ', '), ']'];
+                numCols = numel(vars);
+            end
+            
+            exprs(1).validateMaximaInstance();
+            cmd = ['jacobian(', exprsStr, ', ', varsStr, ')'];
+            id = maxima.sendNoWait(cmd);
+
+            y = MaximaExpression.fromId(id, maxima);
+            y.isMatrix = true;
+            y.matrixRows = numRows;
+            y.matrixCols = numCols;
+        end
+
+        function y = subs(x, old, new)
+            arguments
+                x MaximaExpression
+                old
+                new
+            end
+            % Substitute symbols/expressions in x with new values
+            % MATLAB API: subs(expr, old, new)
+
+            if isempty(old) || isempty(new)
+                y = x;
+                return;
+            end
+
+            if ~isscalar(x)
+                y = arrayfun(@(xi) subs(xi, old, new), x);
+                return;
+            end
+
+            x.validateMaximaInstance();
+            maxima = x.maximaInstance;
+
+            oldSubsStr= MaximaExpression.toMaximaSubstArg(old, maxima);
+            newSubsStr= MaximaExpression.toMaximaSubstArg(new, maxima);
+
+            if isscalar(newSubsStr)
+                subsList = cellfun(@(o) [o, '=', newSubsStr{1}], oldSubsStr, 'UniformOutput', false);
+            elseif length(oldSubsStr) == length(newSubsStr)
+                subsList = cellfun(@(o,n) [o, '=', n], oldSubsStr, newSubsStr, 'UniformOutput', false);
+            else
+                error('subs: old and new must have the same number of elements.');
+            end
+
+            cmd = ['subst([', strjoin(subsList, ', '), '], ', x.identifier, ')'];
+            id = maxima.sendNoWait(cmd);
+
+            y = MaximaExpression.fromId(id, maxima);
+            if x.isMatrix
+                y.isMatrix = true;
+                y.matrixRows = x.matrixRows;
+                y.matrixCols = x.matrixCols;
+            end
+        end
+
+        function vars = symvar(x)
+            arguments
+                x MaximaExpression
+            end
+            % Find symbolic variables in expression
+            % MATLAB API: symvar(expr) returns symbolic variables in alphabetical order
+            % This implementation returns a string array of variable names
+            
+            if ~isscalar(x)
+                for i = 2:numel(x)
+                    if x(i).maximaInstance ~= x(1).maximaInstance
+                        error('All MaximaExpression arguments must belong to the same Maxima instance.');
+                    end
+                end
+            end
+            
+            % Use Maxima's listofvars() to get list of variables
+            idStrs = arrayfun(@(e) e.identifier, x(:), 'UniformOutput', false);
+            idList = strjoin(idStrs, ', ');
+            cmd = ['listofvars([', idList, '])'];
+            x(1).validateMaximaInstance();
+            result = x(1).maximaInstance.sendAndParse([cmd, ';']);
+            
+            if isempty(result)
+                vars = string.empty(0, 1);
+                return;
+            end
+            
+            % Should always be a single line result
+            resultStr = result{1};
+
+            % Parse the result - Maxima returns a list like [x, y, z]
+            % Remove leading/trailing brackets and whitespace
+            resultStr = strtrim(resultStr);
+            if startsWith(resultStr, '[')
+                resultStr = resultStr(2:end);
+            end
+            if endsWith(resultStr, ']')
+                resultStr = resultStr(1:end-1);
+            end
+            
+            % Split by comma and clean up
+            if isempty(strtrim(resultStr))
+                vars = string.empty(0, 1);
+            else
+                varList = strsplit(resultStr, ',');
+                vars = string(strtrim(varList));
+                % Sort alphabetically to match MATLAB behavior
+                vars = sort(vars);
+            end
+        end
+
+        function assume(~, varargin) %#ok<INUSD>
+            % Declare assumptions about variables (STUB)
+            % assume(var, property) - e.g., assume(x, 'real')
+            % 
+            % Note: Maxima assumes variables are real by default, which is the 
+            % default behavior in CADynM. This method is a stub for future enhancement
+            % and compatibility with MATLAB Symbolic Toolbox API.
+            
+            % For now, this is a no-op since all variables are real by default in Maxima
+            % Future enhancement can delegate to Maxima's assume() function if needed
+        end
+
+        function assumeAlso(~, varargin) %#ok<INUSD>
+            % Add additional assumptions about variables (STUB)
+            % assumeAlso(var, property) - add property without clearing previous assumptions
+            %
+            % Note: This is a stub for future enhancement and compatibility with 
+            % MATLAB Symbolic Toolbox API.
+            
+            % For now, this is a no-op since all variables are real by default in Maxima
         end
 
         function validateMaximaInstance(obj)
@@ -606,6 +826,17 @@ classdef MaximaExpression < handle
             
             switch s(1).type
                 case '()'
+                    % special case, mostly for indexing element 1 of a
+                    % scalar object
+                    if isscalar(s(1).subs)
+                        varargout = {builtin('subsref', obj, s)};
+                        return
+                    end
+
+                    if length(s(1).subs) ~= 2
+                        error('Matrix indexing requires exactly 2 subscripts (row, col).');
+                    end
+
                     % Handle parentheses indexing
                     rows = s(1).subs{1};
                     cols = s(1).subs{2};
@@ -623,10 +854,6 @@ classdef MaximaExpression < handle
                         else
                             error('Subscript indexing only supported for matrices.');
                         end
-                    end
-                    
-                    if length(s(1).subs) ~= 2
-                        error('Matrix indexing requires exactly 2 subscripts (row, col).');
                     end
                     
                     if ~isscalar(rows) || ~isscalar(cols)
@@ -1129,6 +1356,55 @@ classdef MaximaExpression < handle
     methods (Static, Access = private)
         function tf = isValidSymbolName(name)
             tf = ~isempty(regexp(name, '^[A-Za-z][A-Za-z0-9_]*$', 'once'));
+        end
+
+        function subsStr = toMaximaSubstArg(val, maxima)
+            % Convert substitution arguments to Maxima strings
+            % Returns:
+            %  subsStr: cell array of Maxima strings
+
+            if isa(val, 'MaximaExpression')
+                if isscalar(val)
+                    if val.maximaInstance ~= maxima
+                        error('All MaximaExpression arguments must belong to the same Maxima instance.');
+                    end
+                    if val.isMatrix
+                        error('Scalar MaximaExpression expected for substitution argument, but matrix found.');
+                    else
+                        subsStr = {val.identifier};
+                    end
+                    return;
+                end
+
+                if any(arrayfun(@(v) v.isMatrix, val))
+                    error('Array inputs to subs cannot contain matrix MaximaExpressions.');
+                end
+                for i = 1:numel(val)
+                    if val(i).maximaInstance ~= maxima
+                        error('All MaximaExpression arguments must belong to the same Maxima instance.');
+                    end
+                end
+
+                subsStr = arrayfun(@(v) v.identifier, val(:), 'UniformOutput', false);
+                return;
+            end
+
+            if iscell(val)
+                subsStr = cellfun(@(v) MaximaExpression.toMaxima(v), val(:), 'UniformOutput', false);
+                return;
+            end
+
+            if ischar(val) || isscalar(val)
+                subsStr = {MaximaExpression.toMaxima(val)};
+                return;
+            end
+
+            if isnumeric(val) || isstring(val)
+                subsStr = arrayfun(@(v) MaximaExpression.toMaxima(v), val(:), 'UniformOutput', false);
+                return
+            end
+
+            error('Unsupported substitution argument type.');
         end
 
         function y = binaryOp(a, b, op)
