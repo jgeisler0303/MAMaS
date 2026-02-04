@@ -1,44 +1,52 @@
-% Extended test for MaximaExpression
+% Extended test for sym
+addpath(fullfile(fileparts(mfilename("fullpath")), '..', 'toolbox'));
+import MAMaS.*
+clc
+if exist('maxima', 'var')
+    maxima.stopInstance;
+end
 
-maxima = MaximaInterface.getInstance(); %#ok<NASGU>
+clear all
+
+maxima = MaximaInterface.getInstance(4); %#ok<NASGU>
 
 % Basic symbols
-x = MaximaExpression('x');
-y = MaximaExpression('y');
-t = MaximaExpression('t');
+x = sym('x');
+y = sym('y');
+t = sym('t');
 assert(x.isSymbol && ~x.isNumber && ~x.isMatrix, 'Expected x to be a symbol.');
 
 % Numeric input (scalar)
-n1 = MaximaExpression(3.5);
+n1 = sym(3.5, 'd');
 assert(n1.isNumber, 'Expected numeric scalar to be a number.');
 assert(strcmp(n1.identifier, num2str(3.5, 16)), 'Numeric identifier mismatch.');
 
 % Numeric input (string)
-n2 = MaximaExpression("2");
+n2 = sym("2");
 assert(n2.isNumber, 'Expected numeric string to be a number.');
 
 % Basic expression
-expr = sin(x) + cos(y)^2 + MaximaExpression.pi();
+expr = sin(x) + cos(y)^2 + sym.pi();
 result = char(expr);
-assert(ischar(result), 'Expected char output from MaximaExpression.');
-assert(~isempty(result), 'Expected non-empty output from MaximaExpression.');
+assert(ischar(result), 'Expected char output from sym.');
+assert(~isempty(result), 'Expected non-empty output from sym.');
 
 % Ensure constant factory works
-c = MaximaExpression.const('e');
+c = sym.const('e');
 assert(strcmp(c.identifier, '%e'), 'Expected identifier %e for constant e.');
 
 % Matrix creation via constructor
-M = MaximaExpression([1, 2; 3, 4]);
+M = sym([1, 2; 3, 4]);
 assert(M.isMatrix, 'Expected matrix flag to be true.');
 assert(M.matrixRows == 2 && M.matrixCols == 2, 'Matrix dimensions mismatch.');
 
 % Matrix element access (subsref)
 e12 = M(1, 2);
-assert(isa(e12, 'MaximaExpression'), 'Expected matrix element to be a MaximaExpression.');
+assert(isa(e12, 'sym'), 'Expected matrix element to be a sym.');
 
 % end() indexing
 e1end = M(1, end);
-assert(isa(e1end, 'MaximaExpression'), 'Expected end-indexed element to be a MaximaExpression.');
+assert(isa(e1end, 'sym'), 'Expected end-indexed element to be a sym.');
 
 % Subscript assignment (subsasgn)
 M(1, 1) = 5;
@@ -78,9 +86,9 @@ depends(y, [x, t]);
 fprintf('\nTesting diff()...\n');
 expr_diff = x^3 + 2*x^2 + x;
 dx = diff(expr_diff, x);
-assert(isa(dx, 'MaximaExpression'), 'Expected diff result to be MaximaExpression.');
+assert(isa(dx, 'sym'), 'Expected diff result to be sym.');
 dxx = diff(expr_diff, x, 2);  % Second derivative
-assert(isa(dxx, 'MaximaExpression'), 'Expected second derivative to be MaximaExpression.');
+assert(isa(dxx, 'sym'), 'Expected second derivative to be sym.');
 fprintf('  diff() tests passed!\n');
 
 % Test jacobian
@@ -96,10 +104,10 @@ fprintf('  jacobian() tests passed!\n');
 fprintf('Testing subs()...\n');
 expr_subs = x^2 + y^2;
 result_subs = subs(expr_subs, x, 2);
-assert(isa(result_subs, 'MaximaExpression'), 'Expected subs result to be MaximaExpression.');
+assert(isa(result_subs, 'sym'), 'Expected subs result to be sym.');
 % Substitute multiple variables
 result_subs2 = subs(expr_subs, [x, y], [2, 3]);
-assert(isa(result_subs2, 'MaximaExpression'), 'Expected multi-subs result to be MaximaExpression.');
+assert(isa(result_subs2, 'sym'), 'Expected multi-subs result to be sym.');
 fprintf('  subs() tests passed!\n');
 
 % Test symvar (find symbolic variables)

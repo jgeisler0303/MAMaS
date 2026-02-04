@@ -110,7 +110,7 @@ classdef MaximaInterface < handle
             % Singleton accessor
             persistent instance
             if isempty(instance) || ~isvalid(instance)
-                instance = MaximaInterface(maxWait);
+                instance = MAMaS.MaximaInterface(maxWait);
             end
             obj = instance;
         end
