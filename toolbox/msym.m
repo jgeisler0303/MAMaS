@@ -1,4 +1,4 @@
-classdef sym < handle
+classdef msym < handle
     % sym
     % MATLAB class for symbolic Maxima expressions
 
@@ -19,7 +19,7 @@ classdef sym < handle
     end
 
     methods
-        function obj = sym(x, varargin)
+        function obj = msym(x, varargin)
             % Constructor for new symbols
 
             % Parse varargin: [dim], [sym_type], [maxima]
@@ -47,8 +47,8 @@ classdef sym < handle
             % Final vararg: maxima instance
             if nextArgIdx <= length(varargin)
                 maxima = varargin{nextArgIdx};
-                if ~isa(maxima, 'MAMaS.MaximaInterface')
-                    error('The maxima argument must be a MAMaS.MaximaInterface instance.');
+                if ~isa(maxima, 'MaximaInterface')
+                    error('The maxima argument must be a MaximaInterface instance.');
                 end
                 nextArgIdx = nextArgIdx + 1;
             end
@@ -60,7 +60,7 @@ classdef sym < handle
             
             % Set default maxima if not provided
             if isempty(maxima)
-                maxima = MAMaS.MaximaInterface.getInstance();
+                maxima = MaximaInterface.getInstance();
             end
             
             % Process dimension
@@ -102,7 +102,7 @@ classdef sym < handle
                 % TODO: error if dim is also provided?
                 % TODO: validate sym_type?
                 % Delegate to matrix creation
-                matObj = MAMaS.sym.matrix(x, maxima);
+                matObj = msym.matrix(x, maxima);
                 % Copy properties from the created matrix object
                 obj.identifier = matObj.identifier;
                 obj.cachedOutput = matObj.cachedOutput;
@@ -163,14 +163,14 @@ classdef sym < handle
             end
 
             x = char(x);
-            if ~MAMaS.sym.isValidSymbolName(x)
+            if ~msym.isValidSymbolName(x)
                 error('Invalid symbol name: "%s".', x);
             end
 
             % Handle dimension: create matrix or scalar symbol
             if ~isempty(dim)
                 % Create symbolic matrix
-                matObj = MAMaS.sym.matrixSymbolic(x, dim(1), dim(2), maxima);
+                matObj = msym.matrixSymbolic(x, dim(1), dim(2), maxima);
                 obj.identifier = matObj.identifier;
                 obj.cachedOutput = matObj.cachedOutput;
                 obj.maximaInstance = matObj.maximaInstance;
@@ -244,153 +244,153 @@ classdef sym < handle
         function y = plus(a, b)
             % Element-wise addition
             if ~isscalar(a)
-                a = MAMaS.sym.matrix(a);
+                a = msym.matrix(a);
             end
             if ~isscalar(b)
-                b = MAMaS.sym.matrix(b);
+                b = msym.matrix(b);
             end
 
-            if isa(a, 'MAMaS.sym') && a.isMatrix && isa(b, 'MAMaS.sym') && b.isMatrix
+            if isa(a, 'msym') && a.isMatrix && isa(b, 'msym') && b.isMatrix
                 if a.matrixRows ~= b.matrixRows || a.matrixCols ~= b.matrixCols
                     error('Matrix dimensions mismatch for addition: [%d x %d] + [%d x %d].', a.matrixRows, a.matrixCols, b.matrixRows, b.matrixCols);
                 end
             end
-            y = MAMaS.sym.binaryOp(a, b, '+');
+            y = msym.binaryOp(a, b, '+');
         end
 
         function y = minus(a, b)
             if ~isscalar(a)
-                a = MAMaS.sym.matrix(a);
+                a = msym.matrix(a);
             end
             if ~isscalar(b)
-                b = MAMaS.sym.matrix(b);
+                b = msym.matrix(b);
             end
-            if isa(a, 'MAMaS.sym') && a.isMatrix && isa(b, 'MAMaS.sym') && b.isMatrix
+            if isa(a, 'msym') && a.isMatrix && isa(b, 'msym') && b.isMatrix
                 if a.matrixRows ~= b.matrixRows || a.matrixCols ~= b.matrixCols
                     error('Matrix dimensions mismatch for subtraction: [%d x %d] - [%d x %d].', a.matrixRows, a.matrixCols, b.matrixRows, b.matrixCols);
                 end
             end
-            y = MAMaS.sym.binaryOp(a, b, '-');
+            y = msym.binaryOp(a, b, '-');
         end
 
         function y = times(a, b)
             % Element-wise multiplication .*
             if ~isscalar(a)
-                a = MAMaS.sym.matrix(a);
+                a = msym.matrix(a);
             end
             if ~isscalar(b)
-                b = MAMaS.sym.matrix(b);
+                b = msym.matrix(b);
             end
 
-            if isa(a, 'MAMaS.sym') && a.isMatrix && isa(b, 'MAMaS.sym') && b.isMatrix
+            if isa(a, 'msym') && a.isMatrix && isa(b, 'msym') && b.isMatrix
                 if a.matrixRows ~= b.matrixRows || a.matrixCols ~= b.matrixCols
                     error('Matrix dimensions mismatch for element-wise multiplication: [%d x %d] .* [%d x %d].', a.matrixRows, a.matrixCols, b.matrixRows, b.matrixCols);
                 end
             end
-            y = MAMaS.sym.binaryOp(a, b, '*');
+            y = msym.binaryOp(a, b, '*');
         end
 
         function y = mtimes(a, b)
             % Matrix multiplication uses dot operator in Maxima (a . b)
             % Check if both operands are matrices
             if ~isscalar(a)
-                a = MAMaS.sym.matrix(a);
+                a = msym.matrix(a);
             end
             if ~isscalar(b)
-                b = MAMaS.sym.matrix(b);
+                b = msym.matrix(b);
             end
 
-            aIsMatrix = isa(a, 'MAMaS.sym') && a.isMatrix;
-            bIsMatrix = isa(b, 'MAMaS.sym') && b.isMatrix;
+            aIsMatrix = isa(a, 'msym') && a.isMatrix;
+            bIsMatrix = isa(b, 'msym') && b.isMatrix;
             
             if aIsMatrix && bIsMatrix
                 % Matrix-matrix multiplication uses "." in Maxima
                 if a.matrixCols ~= b.matrixRows
                     error('Matrix dimensions mismatch for multiplication: [%d x %d] * [%d x %d].', a.matrixRows, a.matrixCols, b.matrixRows, b.matrixCols);
                 end
-                y = MAMaS.sym.binaryOp(a, b, '.');
+                y = msym.binaryOp(a, b, '.');
                 % Result is a matrix with dimensions from outer dimensions
                 y.isMatrix = true;
                 y.matrixRows = a.matrixRows;
                 y.matrixCols = b.matrixCols;
             else
                 % Scalar multiplication uses "*"
-                y = MAMaS.sym.binaryOp(a, b, '*');
+                y = msym.binaryOp(a, b, '*');
             end
         end
 
         function y = rdivide(a, b)
             % Element-wise right division ./
             if ~isscalar(a)
-                a = MAMaS.sym.matrix(a);
+                a = msym.matrix(a);
             end
             if ~isscalar(b)
-                b = MAMaS.sym.matrix(b);
+                b = msym.matrix(b);
             end
             
-            if isa(a, 'MAMaS.sym') && a.isMatrix && isa(b, 'MAMaS.sym') && b.isMatrix
+            if isa(a, 'msym') && a.isMatrix && isa(b, 'msym') && b.isMatrix
                 if a.matrixRows ~= b.matrixRows || a.matrixCols ~= b.matrixCols
                     error('Matrix dimensions mismatch for element-wise multiplication: [%d x %d] .* [%d x %d].', a.matrixRows, a.matrixCols, b.matrixRows, b.matrixCols);
                 end
             end
-            y = MAMaS.sym.binaryOp(a, b, '/');
+            y = msym.binaryOp(a, b, '/');
         end
 
         function y = mrdivide(a, b)
             % Matrix right division a / b
             if ~isscalar(a)
-                a = MAMaS.sym.matrix(a);
+                a = msym.matrix(a);
             end
             if ~isscalar(b)
-                b = MAMaS.sym.matrix(b);
+                b = msym.matrix(b);
             end
 
-            if isa(b, 'MAMaS.sym') && b.isMatrix
+            if isa(b, 'msym') && b.isMatrix
                 error('Matrix right division is not supported.');
             end
-            y = MAMaS.sym.binaryOp(a, b, '/');
+            y = msym.binaryOp(a, b, '/');
         end
 
         function y = power(a, b)
             % Element-wise power .^
             if ~isscalar(a)
-                a = MAMaS.sym.matrix(a);
+                a = msym.matrix(a);
             end
             if ~isscalar(b)
-                b = MAMaS.sym.matrix(b);
+                b = msym.matrix(b);
             end
 
-            if isa(a, 'MAMaS.sym') && a.isMatrix && isa(b, 'MAMaS.sym') && b.isMatrix
+            if isa(a, 'msym') && a.isMatrix && isa(b, 'msym') && b.isMatrix
                 error('Base and exponent cannot both be a matrix.');
             end
-            y = MAMaS.sym.binaryOp(a, b, '^');
+            y = msym.binaryOp(a, b, '^');
         end
 
         function y = mpower(a, b)
             % Matrix power a ^ b
             if ~isscalar(a)
-                a = MAMaS.sym.matrix(a);
+                a = msym.matrix(a);
             end
             
-            if (isa(b, 'MAMaS.sym') && b.isMatrix) || ~isscalar(b)
+            if (isa(b, 'msym') && b.isMatrix) || ~isscalar(b)
                 error('Exponent must not be a matrix.');
             end
-            if isa(a, 'MAMaS.sym') && a.isMatrix
+            if isa(a, 'msym') && a.isMatrix
                 if a.matrixRows ~= a.matrixCols
                     error('Matrix exponentiation requires a square matrix.');
                 end
-                y = MAMaS.sym.binaryOp(a, b, '^^');
+                y = msym.binaryOp(a, b, '^^');
             else
-                y = MAMaS.sym.binaryOp(a, b, '^');
+                y = msym.binaryOp(a, b, '^');
             end
         end
 
         function y = uminus(a)
             if ~isscalar(a)
-                a = MAMaS.sym.matrix(a);
+                a = msym.matrix(a);
             end
 
-            y = MAMaS.sym.unaryOp(a, '-');
+            y = msym.unaryOp(a, '-');
         end
 
         function y = uplus(a)
@@ -421,7 +421,7 @@ classdef sym < handle
                 error('Operations with matrices of syms are not supported. Please consider using symbolic matrices instead.');
             end
             
-            y = MAMaS.sym.funcOp('conjugate', obj);
+            y = msym.funcOp('conjugate', obj);
             if obj.isMatrix
                 % Transpose the Maxima matrix
                 y = y.matrixTranspose();
@@ -434,7 +434,7 @@ classdef sym < handle
                 y = arrayfun(@sin, x);
                 return
             end
-            y = MAMaS.sym.funcOp('sin', x);
+            y = msym.funcOp('sin', x);
         end
 
         function y = cos(x)
@@ -442,7 +442,7 @@ classdef sym < handle
                 y = arrayfun(@cos, x);
                 return
             end
-            y = MAMaS.sym.funcOp('cos', x);
+            y = msym.funcOp('cos', x);
         end
 
         function y = tan(x)
@@ -450,7 +450,7 @@ classdef sym < handle
                 y = arrayfun(@tan, x);
                 return
             end
-            y = MAMaS.sym.funcOp('tan', x);
+            y = msym.funcOp('tan', x);
         end
 
         function y = asin(x)
@@ -458,7 +458,7 @@ classdef sym < handle
                 y = arrayfun(@asin, x);
                 return
             end
-            y = MAMaS.sym.funcOp('asin', x);
+            y = msym.funcOp('asin', x);
         end
 
         function y = acos(x)
@@ -466,7 +466,7 @@ classdef sym < handle
                 y = arrayfun(@acos, x);
                 return
             end
-            y = MAMaS.sym.funcOp('acos', x);
+            y = msym.funcOp('acos', x);
         end
 
         function y = atan(x)
@@ -474,7 +474,7 @@ classdef sym < handle
                 y = arrayfun(@atan, x);
                 return
             end
-            y = MAMaS.sym.funcOp('atan', x);
+            y = msym.funcOp('atan', x);
         end
 
         function y = exp(x)
@@ -482,7 +482,7 @@ classdef sym < handle
                 y = arrayfun(@exp, x);
                 return
             end
-            y = MAMaS.sym.funcOp('exp', x);
+            y = msym.funcOp('exp', x);
         end
 
         function y = expm(x)
@@ -490,19 +490,19 @@ classdef sym < handle
             % If x is a matrix, computes matrix exponential using matrixexp
             % Otherwise, computes scalar exponential
             if ~isscalar(x)
-                x = MAMaS.sym.matrix(x);
+                x = msym.matrix(x);
             end
 
-            if isa(x, 'MAMaS.sym') && x.isMatrix
+            if isa(x, 'msym') && x.isMatrix
                 x.validateMaximaInstance();
                 if x.matrixRows ~= x.matrixCols
                     error('Matrix exponential requires a square matrix.');
                 end
                 cmd = ['matrixexp(', x.identifier, ')'];
                 id = x.maximaInstance.sendNoWait(cmd);
-                y = MAMaS.sym.fromId(id, x.maximaInstance, x.getDimensions);
+                y = msym.fromId(id, x.maximaInstance, x.getDimensions);
             else
-                y = MAMaS.sym.funcOp('exp', x);
+                y = msym.funcOp('exp', x);
             end
         end
 
@@ -511,7 +511,7 @@ classdef sym < handle
                 y = arrayfun(@log, x);
                 return
             end        
-            y = MAMaS.sym.funcOp('log', x);
+            y = msym.funcOp('log', x);
         end
 
         function y = sqrt(x)
@@ -519,7 +519,7 @@ classdef sym < handle
                 y = arrayfun(@sqrt, x);
                 return
             end
-            y = MAMaS.sym.funcOp('sqrt', x);
+            y = msym.funcOp('sqrt', x);
         end
 
         function y = abs(x)
@@ -527,7 +527,7 @@ classdef sym < handle
                 y = arrayfun(@abs, x);
                 return
             end
-            y = MAMaS.sym.funcOp('abs', x);
+            y = msym.funcOp('abs', x);
         end
 
         function y = ratsimp(x)
@@ -535,7 +535,7 @@ classdef sym < handle
                 y = arrayfun(@ratsimp, x);
                 return
             end
-            y = MAMaS.sym.funcOp('ratsimp', x);
+            y = msym.funcOp('ratsimp', x);
         end
 
         function y = trigsimp(x)
@@ -543,7 +543,7 @@ classdef sym < handle
                 y = arrayfun(@trigsimp, x);
                 return
             end
-            y = MAMaS.sym.funcOp('trigsimp', x);
+            y = msym.funcOp('trigsimp', x);
         end
 
         function y = simplify(x)
@@ -552,32 +552,32 @@ classdef sym < handle
                 y = arrayfun(@simplify, x);
                 return;
             end
-            exprX = MAMaS.sym.toMaxima(x);
+            exprX = msym.toMaxima(x);
             
             % Get and validate instance from operand
-            if isa(x, 'MAMaS.sym')
+            if isa(x, 'msym')
                 x.validateMaximaInstance();
                 maxima = x.maximaInstance;
             else
-                maxima = MAMaS.MaximaInterface.getInstance();
+                maxima = MaximaInterface.getInstance();
             end
             
             cmd = ['trigsimp(ratsimp(', exprX, '))']; 
             id = maxima.sendNoWait(cmd);
-            y = MAMaS.sym.fromId(id, maxima, x.getDimensions());
+            y = msym.fromId(id, maxima, x.getDimensions());
         end
 
         function y = diff(x, var, n)
             arguments
-                x (1,1) MAMaS.sym
-                var (1,1) MAMaS.sym
+                x (1,1) msym
+                var (1,1) msym
                 n (1,1) double {mustBeInteger, mustBePositive} = 1
             end
             % Differentiate expression with respect to a variable
             % y = diff(expr, var)      - first derivative
             % y = diff(expr, var, n)   - nth derivative
             if ~isscalar(x)
-                x = MAMaS.sym.matrix(x);
+                x = msym.matrix(x);
             end
             if ~isscalar(var)
                 error('Can only differentiate with respect to a single variable.');
@@ -587,9 +587,9 @@ classdef sym < handle
                 error('The variable argument must be a sym scalar symbol.');
             end
             if n==1
-                y = MAMaS.sym.func('diff', x, var);
+                y = msym.func('diff', x, var);
             else
-                y = MAMaS.sym.func('diff', x, var, n);
+                y = msym.func('diff', x, var, n);
             end
             if x.isMatrix
                 y.isMatrix = true;
@@ -600,8 +600,8 @@ classdef sym < handle
 
         function y = jacobian(exprs, vars)
             arguments
-                exprs MAMaS.sym
-                vars MAMaS.sym
+                exprs msym
+                vars msym
             end
             % Compute Jacobian matrix (matrix of partial derivatives)
             % y = jacobian(exprs, vars)   - Jacobian of expressions w.r.t. variables
@@ -672,12 +672,12 @@ classdef sym < handle
             end
             id = maxima.sendNoWait(cmd);
 
-            y = MAMaS.sym.fromId(id, maxima, [numRows, numCols]);
+            y = msym.fromId(id, maxima, [numRows, numCols]);
         end
 
         function y = subs(x, old, new, fullrat)
             arguments
-                x MAMaS.sym
+                x msym
                 old
                 new
                 fullrat (1,1) logical = false
@@ -698,8 +698,8 @@ classdef sym < handle
             x.validateMaximaInstance();
             maxima = x.maximaInstance;
 
-            oldSubsStr= MAMaS.sym.toMaximaSubstArg(old, maxima);
-            newSubsStr= MAMaS.sym.toMaximaSubstArg(new, maxima);
+            oldSubsStr= msym.toMaximaSubstArg(old, maxima);
+            newSubsStr= msym.toMaximaSubstArg(new, maxima);
 
             if isscalar(newSubsStr)
                 subsList = cellfun(@(o) [o, '=', newSubsStr{1}], oldSubsStr, 'UniformOutput', false);
@@ -716,12 +716,12 @@ classdef sym < handle
             end
             id = maxima.sendNoWait(cmd);
 
-            y = MAMaS.sym.fromId(id, maxima, x.getDimensions());
+            y = msym.fromId(id, maxima, x.getDimensions());
         end
 
         function vars = symvar(x)
             arguments
-                x MAMaS.sym
+                x msym
             end
             % Find symbolic variables in expression
             % MATLAB API: symvar(expr) returns symbolic variables in alphabetical order
@@ -815,10 +815,10 @@ classdef sym < handle
                 % For matrices, use Maxima's copymatrix to create a true copy
                 cmd = ['copymatrix(', obj.identifier, ')'];
                 id = obj.maximaInstance.sendNoWait(cmd);
-                newObj = MAMaS.sym.fromId(id, obj.maximaInstance, obj.getDimensions());
+                newObj = msym.fromId(id, obj.maximaInstance, obj.getDimensions());
             else
                 % For non-matrices, shallow copy is sufficient
-                newObj = MAMaS.sym(obj.identifier, "expr", obj.maximaInstance);
+                newObj = msym(obj.identifier, "expr", obj.maximaInstance);
                 % Copy type flags
                 newObj.isNumber = obj.isNumber;
                 newObj.isSymbol = obj.isSymbol;
@@ -834,7 +834,7 @@ classdef sym < handle
             % row: row index (1-based)
             % col: column index (1-based)
             arguments
-                obj (1,1) MAMaS.sym
+                obj (1,1) msym
                 row (1,1) double {mustBeInteger, mustBePositive}
                 col (1,1) double {mustBeInteger, mustBePositive}
             end
@@ -850,12 +850,12 @@ classdef sym < handle
             obj.validateMaximaInstance();
             cmd = [obj.identifier, '[', num2str(row), ',', num2str(col), ']'];
             id = obj.maximaInstance.sendNoWait(cmd);
-            y = MAMaS.sym.fromId(id, obj.maximaInstance, [1, 1]);
+            y = msym.fromId(id, obj.maximaInstance, [1, 1]);
         end
 
         function y = matrixTranspose(obj)
             arguments
-                obj (1,1) MAMaS.sym
+                obj (1,1) msym
             end 
             % Transpose a matrix
             
@@ -867,12 +867,12 @@ classdef sym < handle
             cmd = ['transpose(', obj.identifier, ')'];
             id = obj.maximaInstance.sendNoWait(cmd);
             
-            y = MAMaS.sym.fromId(id, obj.maximaInstance, obj.getDimensions());
+            y = msym.fromId(id, obj.maximaInstance, obj.getDimensions());
         end
 
         function y = matrixDeterminant(obj)
             arguments
-                obj (1,1) MAMaS.sym
+                obj (1,1) msym
             end
             % Calculate matrix determinant
             
@@ -887,12 +887,12 @@ classdef sym < handle
             obj.validateMaximaInstance();
             cmd = ['determinant(', obj.identifier, ')'];
             id = obj.maximaInstance.sendNoWait(cmd);
-            y = MAMaS.sym.fromId(id, obj.maximaInstance, [1, 1]);
+            y = msym.fromId(id, obj.maximaInstance, [1, 1]);
         end
 
         function y = matrixInverse(obj)
             arguments
-                obj (1,1) MAMaS.sym
+                obj (1,1) msym
             end
             
             if ~obj.isMatrix
@@ -907,12 +907,12 @@ classdef sym < handle
             cmd = ['invert(', obj.identifier, ')'];
             id = obj.maximaInstance.sendNoWait(cmd);
             
-            y = MAMaS.sym.fromId(id, obj.maximaInstance, obj.getDimensions());
+            y = msym.fromId(id, obj.maximaInstance, obj.getDimensions());
         end
 
         function depends(var, varargin)
             arguments
-                var MAMaS.sym
+                var msym
             end
             arguments (Repeating)
                 varargin
@@ -951,7 +951,7 @@ classdef sym < handle
             
             % Validate all independent variables are symbols
             for i = 1:length(args)
-                if ~isa(args{i}, 'MAMaS.sym') || ~args{i}.isSymbol
+                if ~isa(args{i}, 'msym') || ~args{i}.isSymbol
                     error('All elements in indepVars must be symbols.');
                 end
             end
@@ -967,6 +967,89 @@ classdef sym < handle
             % Build and execute the command
             cmd = ['depends(', var.identifier, ', [', indepList, '])'];
             maxima.sendNoWait(cmd);
+        end
+    
+        function varargout = size(obj, varargin)
+            % SIZE  Size of msym object
+            %   S = SIZE(A) returns the matrix dimensions of A as a row vector
+            %   [M,N] = SIZE(A) returns the number of rows and columns separately
+            %   SIZE(A,DIM) returns the size in dimension DIM
+            
+            if isscalar(obj) && obj.isMatrix
+                % Single matrix object
+                dims = obj.getDimensions();
+            elseif ~isscalar(obj)
+                % Array of msym objects
+                dims = builtin('size', obj);
+            else
+                % Scalar non-matrix object
+                dims = [1, 1];
+            end
+            
+            if nargin == 1
+                % No dimension specified - return full size vector
+                if nargout <= 1
+                    varargout{1} = dims;
+                else
+                    % Multiple output arguments: [m, n] = size(A)
+                    for i = 1:nargout
+                        if i <= length(dims)
+                            varargout{i} = dims(i); %#ok<AGROW>
+                        else
+                            varargout{i} = 1; %#OK<AGROW>
+                        end
+                    end
+                end
+            else
+                % Dimension specified
+                dim = varargin{1};
+                if ~isscalar(dim) || dim < 1 || mod(dim, 1) ~= 0
+                    error('Size argument must be a positive integer scalar.');
+                end
+                
+                if dim <= length(dims)
+                    varargout{1} = dims(dim);
+                else
+                    varargout{1} = 1;
+                end
+            end
+        end
+
+        function n = numel(obj, varargin)
+            % NUMEL  Number of elements in msym object
+            %   N = NUMEL(A) returns the total number of elements in A
+            %   NUMEL(A, INDEX1, INDEX2, ...) returns the number of elements in the indexed region
+            
+            if isscalar(obj) && obj.isMatrix
+                % Single matrix object
+                dims = obj.getDimensions();
+                n = prod(dims);
+            elseif ~isscalar(obj)
+                % Array of msym objects
+                n = builtin('numel', obj, varargin{:});
+            else
+                % Scalar non-matrix object
+                n = 1;
+            end
+        end
+
+        function n = length(obj)
+            % LENGTH  Length of msym object
+            %   N = LENGTH(A) returns the largest dimension of A
+            %   For a vector, returns its length
+            %   For a scalar or matrix, returns the larger of the two dimensions
+            
+            if isscalar(obj) && obj.isMatrix
+                % Single matrix object
+                dims = obj.getDimensions();
+                n = max(dims);
+            elseif ~isscalar(obj)
+                % Array of msym objects
+                n = builtin('length', obj);
+            else
+                % Scalar non-matrix object
+                n = 1;
+            end
         end
 
         function varargout = subsref(obj, s)
@@ -1035,7 +1118,7 @@ classdef sym < handle
                         id = obj.maximaInstance.sendNoWait(cmd);
                         
                         % Create sym object and set matrix properties
-                        y = MAMaS.sym.fromId(id, obj.maximaInstance, [numel(rows), numel(cols)]);
+                        y = msym.fromId(id, obj.maximaInstance, [numel(rows), numel(cols)]);
                     else
                         % Get one element
                         y = obj.matrixElement(rows, cols);
@@ -1097,7 +1180,7 @@ classdef sym < handle
                     end
                     
                     dataStr = cell(numel(rows), numel(cols));
-                    if isa(val, 'MAMaS.sym') && val.isMatrix
+                    if isa(val, 'msym') && val.isMatrix
                         if numel(rows) ~= val.matrixRows || numel(cols) ~= val.matrixCols
                             error('Assigned matrix size does not match target submatrix size.');
                         end
@@ -1122,7 +1205,7 @@ classdef sym < handle
                         end
                         for i = 1:numel(rows)
                             for j = 1:numel(cols)
-                                dataStr{i,j} = MAMaS.sym.toMaxima(val{i,j});
+                                dataStr{i,j} = msym.toMaxima(val{i,j});
                             end
                         end
                     end
@@ -1230,7 +1313,7 @@ classdef sym < handle
                     arg = varargin{1};
                     
                     if isvector(arg)
-                        if isa(arg, 'MAMaS.sym')
+                        if isa(arg, 'msym')
                             arg = {arg(:)}; 
                         elseif isstring(arg)
                             arg =  convertStringsToChars(arg);
@@ -1243,11 +1326,11 @@ classdef sym < handle
                 else
                     arg = varargin;
                 end
-                argStrs = cellfun(@MAMaS.sym.toMaxima, arg, 'UniformOutput', false);
+                argStrs = cellfun(@msym.toMaxima, arg, 'UniformOutput', false);
                 exprArgs = strjoin(argStrs, ', ');
 
                 for i = 1:length(arg)
-                    if isa(arg{i}, 'MAMaS.sym')
+                    if isa(arg{i}, 'msym')
                         if isempty(maxima)
                             % if all instances are the same, vaidating the first is sufficient
                             arg{i}.validateMaximaInstance();
@@ -1261,7 +1344,7 @@ classdef sym < handle
                 end
             end
             if isempty(maxima)
-                maxima = MAMaS.MaximaInterface.getInstance();
+                maxima = MaximaInterface.getInstance();
             end
             
             cmd = [fname, '(', exprArgs, ')'];
@@ -1270,7 +1353,7 @@ classdef sym < handle
             % TODO: handle 1x1 matrices properly
             % parse dimensions from result string "[r, c]"
             dims = str2num(res{1}); %#ok<ST2NM>
-            y = MAMaS.sym.fromId(id, maxima, dims);
+            y = msym.fromId(id, maxima, dims);
         end
 
         function obj = const(name)
@@ -1304,35 +1387,35 @@ classdef sym < handle
                     error('Unknown constant name: "%s".', name);
             end
 
-            obj = MAMaS.sym(id, "const");
+            obj = msym(id, "const");
         end
 
         function obj = pi()
-            obj = MAMaS.sym.const('pi');
+            obj = msym.const('pi');
         end
 
         function obj = e()
-            obj = MAMaS.sym.const('e');
+            obj = msym.const('e');
         end
 
         function obj = gamma()
-            obj = MAMaS.sym.const('gamma');
+            obj = msym.const('gamma');
         end
 
         function obj = i()
-            obj = MAMaS.sym.const('i');
+            obj = msym.const('i');
         end
 
         function obj = inf()
-            obj = MAMaS.sym.const('inf');
+            obj = msym.const('inf');
         end
 
         function obj = minf()
-            obj = MAMaS.sym.const('minf');
+            obj = msym.const('minf');
         end
 
         function obj = phi()
-            obj = MAMaS.sym.const('phi');
+            obj = msym.const('phi');
         end
 
         function y = matrix(data, maxima)
@@ -1349,7 +1432,7 @@ classdef sym < handle
                 error('Will not produce a 1x1 matrix. Use sym() constructor instead.');
             end
 
-            if ~isnumeric(data) && ~isstring(data) && ~iscell(data) && ~isa(data, 'MAMaS.sym')
+            if ~isnumeric(data) && ~isstring(data) && ~iscell(data) && ~isa(data, 'msym')
                 error('Matrix data must be sym, numeric, string array, cell array, or contain syms.');
             end
             
@@ -1365,7 +1448,7 @@ classdef sym < handle
             dataStr = cell(rows, cols);
             for i = 1:rows
                 for j = 1:cols
-                    if isa(data{i,j}, 'MAMaS.sym')
+                    if isa(data{i,j}, 'msym')
                         if isempty(maxima)
                             data{i,j}.validateMaximaInstance();
                             maxima = data{i,j}.maximaInstance;
@@ -1375,7 +1458,7 @@ classdef sym < handle
                             end
                         end
                     end
-                    dataStr{i,j} = MAMaS.sym.toMaxima(data{i,j});
+                    dataStr{i,j} = msym.toMaxima(data{i,j});
                 end
             end
             if isempty(maxima)
@@ -1395,7 +1478,7 @@ classdef sym < handle
             id = maxima.sendNoWait(cmd);
             
             % Create sym object and set matrix properties
-            y = MAMaS.sym.fromId(id, maxima, size(data));
+            y = msym.fromId(id, maxima, size(data));
         end
 
         function y = matrixSymbolic(name, rows, cols, maxima)
@@ -1427,7 +1510,7 @@ classdef sym < handle
             id = maxima.sendNoWait(cmd);
             
             % Create sym object and set matrix properties
-            y = MAMaS.sym.fromId(id, maxima, [rows, cols]);
+            y = msym.fromId(id, maxima, [rows, cols]);
         end
 
         function y = zeros(rows, cols, maxima)
@@ -1453,7 +1536,7 @@ classdef sym < handle
             cmd = ['zeromatrix(', num2str(rows), ', ', num2str(cols), ')'];
             id = maxima.sendNoWait(cmd);
             
-            y = MAMaS.sym.fromId(id, maxima, [rows, cols]);
+            y = msym.fromId(id, maxima, [rows, cols]);
         end
 
         function y = ones(rows, cols, maxima)
@@ -1479,7 +1562,7 @@ classdef sym < handle
             cmd = ['genmatrix(1, ', num2str(rows), ', ', num2str(cols), ')'];
             id = maxima.sendNoWait(cmd);
             
-            y = MAMaS.sym.fromId(id, maxima, [rows, cols]);
+            y = msym.fromId(id, maxima, [rows, cols]);
         end
 
         function y = eye(n, maxima)
@@ -1503,7 +1586,7 @@ classdef sym < handle
             cmd = ['ident(', num2str(n), ')'];
             id = maxima.sendNoWait(cmd);
             
-            y = MAMaS.sym.fromId(id, maxima, [n, n]);
+            y = msym.fromId(id, maxima, [n, n]);
         end
     end
 
@@ -1543,7 +1626,7 @@ classdef sym < handle
             % Returns:
             %  subsStr: cell array of Maxima strings
 
-            if isa(val, 'MAMaS.sym')
+            if isa(val, 'msym')
                 if isscalar(val)
                     if val.maximaInstance ~= maxima
                         error('All sym arguments must belong to the same Maxima instance.');
@@ -1570,17 +1653,17 @@ classdef sym < handle
             end
 
             if iscell(val)
-                subsStr = cellfun(@(v) MAMaS.sym.toMaxima(v), val(:), 'UniformOutput', false);
+                subsStr = cellfun(@(v) msym.toMaxima(v), val(:), 'UniformOutput', false);
                 return;
             end
 
             if ischar(val) || isscalar(val)
-                subsStr = {MAMaS.sym.toMaxima(val)};
+                subsStr = {msym.toMaxima(val)};
                 return;
             end
 
             if isnumeric(val) || isstring(val)
-                subsStr = arrayfun(@(v) MAMaS.sym.toMaxima(v), val(:), 'UniformOutput', false);
+                subsStr = arrayfun(@(v) msym.toMaxima(v), val(:), 'UniformOutput', false);
                 return
             end
 
@@ -1588,11 +1671,11 @@ classdef sym < handle
         end
 
         function y = binaryOp(a, b, op)
-            exprA = MAMaS.sym.toMaxima(a);
-            exprB = MAMaS.sym.toMaxima(b);
+            exprA = msym.toMaxima(a);
+            exprB = msym.toMaxima(b);
             
             % Get and validate instance from first sym operand
-            maxima = MAMaS.sym.getMaximaFromOperands(a, b);
+            maxima = msym.getMaximaFromOperands(a, b);
             
             % no need for parentheses because operands are always symbols or maxima identifiers
             cmd = [exprA, op, exprB];
@@ -1601,20 +1684,20 @@ classdef sym < handle
 
             % Handle element-wise matrix operations
             dims = [1, 1];
-            if isa(a, 'MAMaS.sym') && a.isMatrix
+            if isa(a, 'msym') && a.isMatrix
                 dims = a.getDimensions();
-            elseif isa(b, 'MAMaS.sym') && b.isMatrix
+            elseif isa(b, 'msym') && b.isMatrix
                 dims = b.getDimensions();
             end
 
-            y = MAMaS.sym.fromId(id, maxima, dims);
+            y = msym.fromId(id, maxima, dims);
         end
 
         function y = unaryOp(a, op)
-            exprA = MAMaS.sym.toMaxima(a);
+            exprA = msym.toMaxima(a);
             
             % Get and validate instance from operand
-            if isa(a, 'MAMaS.sym')
+            if isa(a, 'msym')
                 a.validateMaximaInstance();
                 maxima = a.maximaInstance;
             else
@@ -1626,10 +1709,10 @@ classdef sym < handle
             id = maxima.sendNoWait(cmd);
 
             dims = [1, 1];
-            if isa(a, 'MAMaS.sym') && a.isMatrix
+            if isa(a, 'msym') && a.isMatrix
                 dims = a.getDimensions();
             end
-            y = MAMaS.sym.fromId(id, maxima, dims);
+            y = msym.fromId(id, maxima, dims);
         end
         
         function y = funcOp(fname, arg)
@@ -1637,49 +1720,49 @@ classdef sym < handle
             % fname: function name (string)
             % arg: argument (can be sym, number, or string)
             
-            exprArg = MAMaS.sym.toMaxima(arg);
+            exprArg = msym.toMaxima(arg);
             
             % Get and validate instance from operand
-            if isa(arg, 'MAMaS.sym')
+            if isa(arg, 'msym')
                 arg.validateMaximaInstance();
                 maxima = arg.maximaInstance;
             else
-                maxima = MAMaS.MaximaInterface.getInstance();
+                maxima = MaximaInterface.getInstance();
             end
             
             cmd = [fname, '(', exprArg, ')'];
             id = maxima.sendNoWait(cmd);
-            y = MAMaS.sym.fromId(id, maxima, arg.getDimensions());
+            y = msym.fromId(id, maxima, arg.getDimensions());
         end
 
         function maxima = getMaximaFromOperands(a, b)
             % Get MaximaInterface instance from operands and validate
-            if isa(a, 'MAMaS.sym') && isa(b, 'MAMaS.sym')
+            if isa(a, 'msym') && isa(b, 'msym')
                 if a.maximaInstance ~= b.maximaInstance
                     error('Both sym operands must belong to the same MaximaInterface instance.');
                 end
                 % if both instances are the same, vaidating one is sufficient
                 a.validateMaximaInstance();
                 maxima = a.maximaInstance;
-            elseif isa(a, 'MAMaS.sym')
+            elseif isa(a, 'msym')
                 a.validateMaximaInstance();
                 maxima = a.maximaInstance;
-            elseif isa(b, 'MAMaS.sym')
+            elseif isa(b, 'msym')
                 b.validateMaximaInstance();
                 maxima = b.maximaInstance;
             else
-                maxima = MAMaS.MaximaInterface.getInstance();
+                maxima = MaximaInterface.getInstance();
             end
         end
 
         function s = toMaxima(x)
-            if isa(x, 'MAMaS.sym')
+            if isa(x, 'msym')
                 s = x.identifier;
             elseif isnumeric(x) && isscalar(x)
                 s = num2str(x, 16);
             elseif ischar(x) || (isstring(x) && isscalar(x))
                 x = char(x);
-                if ~MAMaS.sym.isValidSymbolName(x)
+                if ~msym.isValidSymbolName(x)
                     error('String operands must be valid symbol names.');
                 end
                 s = x;
@@ -1689,7 +1772,7 @@ classdef sym < handle
         end
 
         function obj = fromId(id, maxima, dims)
-            obj = MAMaS.sym(id, dims, "expr", maxima);
+            obj = msym(id, dims, "expr", maxima);
         end
     end
 end
