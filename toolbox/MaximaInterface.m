@@ -10,11 +10,14 @@ classdef MaximaInterface < handle
     %   res2 = maxima.sendAndParse('a + b;');
 
     properties
-        maxWait = 2.0; % seconds
+        maxWait = 10.0; % seconds
+        startedAt = 0
+        transcript_file = ''
     end
 
     properties (SetAccess = private)
         startupLines
+        transcript_fid
     end
 
     properties (Access = private)
@@ -30,17 +33,31 @@ classdef MaximaInterface < handle
     end
 
     methods
-        function obj = MaximaInterface(maxWait)
+        function obj = MaximaInterface(maxWait, transcript_file)
             arguments
                 maxWait (1,1) double {mustBePositive} = 2.0
+                transcript_file = ''
             end
-
+            
             obj.nextId = 1;
             obj.maxWait = maxWait;
+            obj.transcript_file = transcript_file;
+            if ~isempty(transcript_file)
+                obj.transcript_fid = fopen(transcript_file, 'w');
+            end
+
             obj.startMaxima();
+            obj.startedAt = datetime('now');
+
+            obj.sendNoWait('load(lrats)');
+            obj.sendNoWait('load(gentran)');
+            obj.sendNoWait('gentranlang:''c$');
+            obj.sendNoWait('genfloat:true$');
+            obj.sendNoWait('clinelen:1000$');
+            obj.sendNoWait('optimizeWithIntermediates(l, temp):= block([o, temps, pre_replace_list, replace_list, temp_exprs, temp_vars, i], o: optimize(l), if op(o)#''block then return([0, [], [], o]), temps: inpart(o, 1), pre_replace_list: makelist(temps[i]=concat(temp, i), i, 1, length(temps)), replace_list: [], temp_vars: [], temp_exprs: [], for i: 1 thru length(temps) do ( if not(listp(inpart(o, i+1, 2)) or matrixp(inpart(o, i+1, 2))) then ( temp_vars: endcons(concat(temp, i), temp_vars), temp_exprs: endcons(subst(pre_replace_list, inpart(o, i+1, 2)), temp_exprs), replace_list: endcons(pre_replace_list[i], replace_list) ) else ( replace_list: endcons(inpart(o, i+1, 1)=inpart(o, i+1, 2), replace_list) ) ), opts: subst(replace_list, subst(replace_list, inpart(o, length(temps)+2))), [length(temp_vars), temp_vars, temp_exprs, opts] )$');
         end
 
-        function id = sendNoWait(obj, cmd)
+        function idStr = sendNoWait(obj, cmd)
             % Send a command to Maxima without output (terminated by $)
             % No further ; or $ must be in the command!
             % Returns the new output ID (%oN)
@@ -52,32 +69,49 @@ classdef MaximaInterface < handle
             if ~endsWith(strtrim(cmd), '$')
                 cmd = [cmd, '$'];
             end
+            % % Safe mode
+            % [~, extraLines, id] = sendAndParse(obj, cmd);
+            % msg = strjoin(extraLines, newline);
+            % if contains(msg, 'error') || contains(msg, 'incorrect')
+            %     error('Maxima error: "%s"\nfrom command "%s".', msg, cmd)
+            % end
+            % idStr = sprintf('%%o%d', id);
 
             obj.stdin.write([cmd, newline]);
             obj.stdin.flush();
 
             % Maxima updates the internal %o number even without output
-            id = sprintf('%%o%d', obj.nextId);
+            idStr = sprintf('%%o%d', obj.nextId);
             obj.nextId = obj.nextId + 1;
         end
 
-        function result = sendAndParse(obj, cmd)
+        function [result, extraLines, id] = sendAndParse(obj, cmd)
             % Send a command to Maxima and parse the response
             % Returns result string and output ID (%oN)
             if isempty(obj.proc) || ~obj.proc.isAlive()
                 delete(obj);
                 error('Maxima process has died. Interface and all expressions are now invalid.');
             end
-
-            if ~endsWith(strtrim(cmd), ';')
-                cmd = [cmd, ';'];
+    
+            if ~isempty(cmd)
+                id = obj.nextId;
+                expect_outprompt = true;
+                if endsWith(strtrim(cmd), '$')
+                    expect_outprompt = false;
+                elseif ~endsWith(strtrim(cmd), ';')
+                    cmd = [cmd, ';'];
+                end
+                obj.stdin.write([cmd, newline]);
+                obj.stdin.flush();
+                
+                obj.nextId = obj.nextId + 1;
+            else
+                id = [];
             end
-            obj.stdin.write([cmd, newline]);
-            obj.stdin.flush();
 
-            [result, ~] = obj.readToNextInputPrompt();
+            [result, extraLines] = obj.readToNextInputPrompt();
 
-            if isempty(result)
+            if ~isempty(cmd) && expect_outprompt && isempty(result)
                 warning('Was expecting output from Maxima but did not get any.')
             end
         end
@@ -91,6 +125,9 @@ classdef MaximaInterface < handle
                     % Ignore if process is already dead
                 end
             end
+            if ~isempty(obj.transcript_file)
+                fclose(obj.transcript_fid);
+            end
         end
 
         function checkAlive(obj)
@@ -102,15 +139,16 @@ classdef MaximaInterface < handle
     end
 
     methods (Static)
-        function obj = getInstance(maxWait)
+        function obj = getInstance(maxWait, transcript_file)
             arguments
-                maxWait (1,1) double {mustBePositive} = 2.0
+                maxWait (1,1) double {mustBePositive} = 10.0
+                transcript_file = ''
             end
 
             % Singleton accessor
             persistent instance
             if isempty(instance) || ~isvalid(instance)
-                instance = MaximaInterface(maxWait);
+                instance = MaximaInterface(maxWait, transcript_file);
             end
             obj = instance;
         end
@@ -141,6 +179,7 @@ classdef MaximaInterface < handle
             end
 
             lastSeenIn = 0;
+            continued_output = false;
             while toc(tStart) < obj.maxWait
                 % Let's hope we always read entire lines
                 raw = obj.readAll();
@@ -153,24 +192,36 @@ classdef MaximaInterface < handle
                     if isempty(line)
                         continue;
                     end
-
+                    
+                    % detect and process input prompt
                     tok = regexp(line, '^\(%i(\d+)\)', 'once', 'tokens');
                     if ~isempty(tok)
                         lastSeenIn = str2double(tok{1});
                         % We may have to catch up to the current input id
                         if lastSeenIn > obj.nextId
-                            error('Maxima input prompt IDs are not sequential. Read %%i%d but while current should be %%i%d.', lastSeenIn, obj.nextId);
+                            warning(['Maxima input prompt IDs are not sequential. Read %%i%d but current should be %%i%d.' newline ...
+                                'Saw this output: "%s"'], lastSeenIn, obj.nextId, strjoin(extraLines, newline));
+                            obj.nextId = lastSeenIn;
                         end
                         continue;
                     end
 
-                     [tok, id_end] = regexp(line, '^\(%o(\d+)\)', 'once', 'tokens', 'end');
+                    % detect and process ouput prompt
+                    [tok, id_end] = regexp(line, '^\(%o(\d+)\)', 'once', 'tokens', 'end');
                     if ~isempty(tok)
-                        outputLines{end+1} = strtrim(line(id_end+1:end)); %#ok<AGROW>
+                        outputLine = strtrim(line(id_end+1:end));
+                        continued_output = endsWith(outputLine, '\');
+
+                        outputLines{end+1} = outputLine; %#ok<AGROW>
                         % Output ids may be more than one at a time. Next input id must be one more than last output id.
                         obj.nextId = str2double(tok{1}) + 1;
                     else
-                        extraLines{end+1} = line; %#ok<AGROW>
+                        if continued_output
+                            outputLines{end} = [outputLines{end}, newline, line];
+                            continued_output = endsWith(line, '\');
+                        else
+                            extraLines{end+1} = line; %#ok<AGROW>
+                        end
                     end
                 end
                 if lastSeenIn == obj.nextId
@@ -180,6 +231,9 @@ classdef MaximaInterface < handle
             end
             if toc(tStart) >= obj.maxWait
                 warning('Timeout while reading from Maxima process. Expression IDs may be out of sync.');
+            end
+            if continued_output
+                warning('Output from Maxima was continued with a backslash. This may cause parsing issues. Output was: "%s"', strjoin(outputLines, newline));
             end
             obj.nextId = lastSeenIn;
         end
@@ -229,6 +283,9 @@ classdef MaximaInterface < handle
                 sb.append(char(code));
             end
             s = char(sb.toString());    % convert Java String to MATLAB char
+            if ~isempty(obj.transcript_file)
+                fprintf(obj.transcript_fid, '%s', s);
+            end
         end
     end
 end
