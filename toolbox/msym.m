@@ -255,10 +255,20 @@ classdef msym < handle
                 return
             end
 
-            cmd = sprintf('gentran(eval(scanmap(''float,%s)))$', obj.identifier);
+            % cmd = ['string(scanmap(''float,subst(M_PI,%pi,subst(pow,"^",apply1(' obj.identifier ', replace_exp_rule_internal)))))'];
+            cmd = ['string(scanmap(''float,subst(M_PI,%pi,subst(pow,"^",apply1(' obj.identifier ',e_to_exp_rule)))))'];
             obj.validateMaximaInstance;
-            [~, extraLines] = obj.maximaInstance.sendAndParse(cmd);
-            s = strjoin(extraLines);
+            result = obj.maximaInstance.sendAndParse(cmd);
+            if iscell(result)
+                s = strjoin(result, newline);
+            else
+                s = result;
+            end
+
+            % cmd = sprintf('gentran(eval(scanmap(''float,%s)))$', obj.identifier);
+            % obj.validateMaximaInstance;
+            % [~, extraLines] = obj.maximaInstance.sendAndParse(cmd, true);
+            % s = strtrim(strjoin(extraLines));
         end            
 
         % Operator Overloads
@@ -1480,7 +1490,7 @@ classdef msym < handle
             
             if isscalar_matlab(obj) && obj.isMatrix && strcmp(s(1).type, '()')
                 if length(s(1).subs) > 2
-                    error('Cannot assign to matrix beyond 2 subscripts (row, col).');
+                    error('Cannot index matrix beyond 2 subscripts (row, col).');
                 end
                 [rows, cols, scalar_index] = checksubs(obj, s, false);
 
@@ -1567,12 +1577,26 @@ classdef msym < handle
                 if isa(val, 'msym') && isscalar_matlab(val) && val.isMatrix
                     if ~isscalar(val)
                         if scalar_index
-                            % TODO: possibly allow to assign row vector
-                            if numel(rows) ~= val.matrixRows || 1 ~= val.matrixCols
+                            col_vec = true;
+                            if val.matrixRows==0 || val.matrixCols==0
+                                vector_len = 0;
+                            elseif val.matrixRows==1
+                                vector_len = val.matrixCols;
+                                col_vec = false;
+                            elseif val.matrixCols==1
+                                vector_len = val.matrixRows;
+                            else
+                                error('Assignment to scalar index must be a vector.')
+                            end
+                            if vector_len ~= numel(rows)
                                 error('Assigned matrix size does not match target submatrix size.');
                             end
                             for i = 1:numel(rows)
-                                dataStr{i,1} = [val.identifier, '[', num2str(i), ',', num2str(i), ']'];
+                                if col_vec
+                                    dataStr{i,1} = [val.identifier, '[', num2str(i), ',1]'];
+                                else
+                                    dataStr{i,1} = [val.identifier, '[1,', num2str(i), ']'];
+                                end
                             end
                         else
                             if numel(rows) ~= val.matrixRows || numel(cols) ~= val.matrixCols
@@ -1600,9 +1624,17 @@ classdef msym < handle
                     end
                     if ~isscalar(val)
                         if scalar_index
-                            % TODO: possibly allow to assign row vector
-                            if size(val, 1) ~= numel(rows) || 1 ~= numel(cols)
-                                error('Assigned value size does not match target submatrix size.');
+                            if size(val, 1)==0 || size(val, 2)==0
+                                vector_len = 0;
+                            elseif size(val, 1)==1
+                                vector_len = size(val, 2);
+                            elseif size(val, 2)==1
+                                vector_len = size(val, 1);
+                            else
+                                error('Assignment to scalar index must be a vector.')
+                            end
+                            if vector_len ~= numel(rows)
+                                error('Assigned matrix size does not match target submatrix size.');
                             end
                             for i = 1:numel(rows)
                                 dataStr{i,1} = msym.toMaximaStr(val{i});
@@ -1933,7 +1965,8 @@ classdef msym < handle
             % rows: number of rows
             % cols: number of columns
             % maxima: optional MaximaInterface instance
-            
+            % TODO: implement traditional sz = [r,c] invocation
+
             arguments
                 rows (1,1) double {mustBeInteger, mustBePositive}
                 cols (1,1) double {mustBeInteger, mustBePositive}

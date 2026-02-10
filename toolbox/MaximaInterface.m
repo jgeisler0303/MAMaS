@@ -50,10 +50,12 @@ classdef MaximaInterface < handle
             obj.startedAt = datetime('now');
 
             obj.sendNoWait('load(lrats)');
-            obj.sendNoWait('load(gentran)');
-            obj.sendNoWait('gentranlang:''c$');
-            obj.sendNoWait('genfloat:true$');
-            obj.sendNoWait('clinelen:1000$');
+            % obj.sendNoWait('load(gentran)');
+            % obj.sendNoWait('gentranlang:''c$');
+            % obj.sendNoWait('genfloat:true$');
+            % obj.sendNoWait('clinelen:1000$');
+            obj.sendNoWait('matchdeclare(exp_to_e_match, true)$');
+            obj.sendNoWait('defrule(e_to_exp_rule, %e^x, exp(x))$');
             obj.sendNoWait('optimizeWithIntermediates(l, temp):= block([o, temps, pre_replace_list, replace_list, temp_exprs, temp_vars, i], o: optimize(l), if op(o)#''block then return([0, [], [], o]), temps: inpart(o, 1), pre_replace_list: makelist(temps[i]=concat(temp, i), i, 1, length(temps)), replace_list: [], temp_vars: [], temp_exprs: [], for i: 1 thru length(temps) do ( if not(listp(inpart(o, i+1, 2)) or matrixp(inpart(o, i+1, 2))) then ( temp_vars: endcons(concat(temp, i), temp_vars), temp_exprs: endcons(subst(pre_replace_list, inpart(o, i+1, 2)), temp_exprs), replace_list: endcons(pre_replace_list[i], replace_list) ) else ( replace_list: endcons(inpart(o, i+1, 1)=inpart(o, i+1, 2), replace_list) ) ), opts: subst(replace_list, subst(replace_list, inpart(o, length(temps)+2))), [length(temp_vars), temp_vars, temp_exprs, opts] )$');
         end
 
@@ -85,7 +87,12 @@ classdef MaximaInterface < handle
             obj.nextId = obj.nextId + 1;
         end
 
-        function [result, extraLines, id] = sendAndParse(obj, cmd)
+        function [result, extraLines, id] = sendAndParse(obj, cmd, expect_extra)
+            arguments
+                obj
+                cmd
+                expect_extra = false
+            end
             % Send a command to Maxima and parse the response
             % Returns result string and output ID (%oN)
             if isempty(obj.proc) || ~obj.proc.isAlive()
@@ -109,7 +116,7 @@ classdef MaximaInterface < handle
                 id = [];
             end
 
-            [result, extraLines] = obj.readToNextInputPrompt();
+            [result, extraLines] = obj.readToNextInputPrompt(expect_extra);
 
             if ~isempty(cmd) && expect_outprompt && isempty(result)
                 warning('Was expecting output from Maxima but did not get any.')
@@ -164,7 +171,11 @@ classdef MaximaInterface < handle
     end
 
     methods (Access = private)
-        function [outputLines, extraLines] = readToNextInputPrompt(obj)
+        function [outputLines, extraLines] = readToNextInputPrompt(obj, expect_extra)
+            arguments
+                obj
+                expect_extra = false
+            end
             % Read available output until the all expected output is seen.
             % Collect lines without prompts (startup), output prompt lines,
             % discard empty lines and input prompt lines. Update nextId
@@ -194,7 +205,7 @@ classdef MaximaInterface < handle
                     end
                     
                     % detect and process input prompt
-                    tok = regexp(line, '^\(%i(\d+)\)', 'once', 'tokens');
+                    [tok, id_end] = regexp(line, '^\(%i(\d+)\)', 'once', 'tokens', 'end');
                     if ~isempty(tok)
                         lastSeenIn = str2double(tok{1});
                         % We may have to catch up to the current input id
@@ -203,28 +214,38 @@ classdef MaximaInterface < handle
                                 'Saw this output: "%s"'], lastSeenIn, obj.nextId, strjoin(extraLines, newline));
                             obj.nextId = lastSeenIn;
                         end
-                        continue;
+                        line = strtrim(line(id_end+1:end));
+                        % continue;
                     end
 
                     % detect and process ouput prompt
                     [tok, id_end] = regexp(line, '^\(%o(\d+)\)', 'once', 'tokens', 'end');
                     if ~isempty(tok)
-                        outputLine = strtrim(line(id_end+1:end));
-                        continued_output = endsWith(outputLine, '\');
+                        continued_output = endsWith(line, '\');
+                        if continued_output
+                            outputLine = strtrim(line(id_end+1:end-1));
+                        else
+                            outputLine = strtrim(line(id_end+1:end));
+                        end
 
                         outputLines{end+1} = outputLine; %#ok<AGROW>
                         % Output ids may be more than one at a time. Next input id must be one more than last output id.
                         obj.nextId = str2double(tok{1}) + 1;
                     else
                         if continued_output
-                            outputLines{end} = [outputLines{end}, newline, line];
                             continued_output = endsWith(line, '\');
+                            if continued_output
+                                outputLines{end} = [outputLines{end}, line(1:end-1)];
+                            else
+                                outputLines{end} = [outputLines{end}, line];
+                            end
                         else
                             extraLines{end+1} = line; %#ok<AGROW>
+                            expect_extra = false;
                         end
                     end
                 end
-                if lastSeenIn == obj.nextId
+                if lastSeenIn == obj.nextId && ~expect_extra
                     break;
                 end
                 pause(0.01);
