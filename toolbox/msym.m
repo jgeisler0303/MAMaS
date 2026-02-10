@@ -392,14 +392,16 @@ classdef msym < handle
                     error('Matrix dimensions mismatch for multiplication: [%d x %d] * [%d x %d].', a.matrixRows, a.matrixCols, b.matrixRows, b.matrixCols);
                 end
                 y = msym.binaryOp(a, b, '.');
-                % Result is a matrix with dimensions from outer dimensions
-                y.isMatrix = true;
-                y.matrixRows = a.matrixRows;
-                y.matrixCols = b.matrixCols;
-
-                % automatic back conversion to maxima scalar
-                if y.matrixRows==1 && y.matrixCols==1
-                    y = y(1, 1);
+                if a.matrixRows==1 && b.matrixCols==1
+                    % Maxima automatically converts 1x1 matrices into scalars
+                    y.isMatrix = false;
+                    y.matrixRows = 0;
+                    y.matrixCols = 0;
+                else
+                    % Result is a matrix with dimensions from outer dimensions
+                    y.isMatrix = true;
+                    y.matrixRows = a.matrixRows;
+                    y.matrixCols = b.matrixCols;
                 end
             else
                 % Scalar multiplication uses "*"
