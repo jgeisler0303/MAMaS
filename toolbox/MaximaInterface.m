@@ -191,6 +191,7 @@ classdef MaximaInterface < handle
 
             lastSeenIn = 0;
             continued_output = false;
+            list_output = false;        % Lists don't have line continuation characters
             while toc(tStart) < obj.maxWait
                 % Let's hope we always read entire lines
                 raw = obj.readAll();
@@ -227,6 +228,12 @@ classdef MaximaInterface < handle
                         else
                             outputLine = strtrim(line(id_end+1:end));
                         end
+                        if startsWith(outputLine, '[') && ~endsWith(outputLine, ']')
+                            list_output = true;
+                        end
+                        if isempty(outputLine)
+                            continued_output = true; % some times the output is only in the next line
+                        end
 
                         outputLines{end+1} = outputLine; %#ok<AGROW>
                         % Output ids may be more than one at a time. Next input id must be one more than last output id.
@@ -234,11 +241,14 @@ classdef MaximaInterface < handle
                     else
                         if continued_output
                             continued_output = endsWith(line, '\');
-                            if continued_output
+                            if continued_output % ignore '\' if it not at the end of a continuation line
                                 outputLines{end} = [outputLines{end}, line(1:end-1)];
                             else
                                 outputLines{end} = [outputLines{end}, line];
                             end
+                        elseif list_output
+                            outputLines{end} = [outputLines{end}, line];
+                            list_output = ~endsWith(line, ']');
                         else
                             extraLines{end+1} = line; %#ok<AGROW>
                             expect_extra = false;
@@ -253,8 +263,8 @@ classdef MaximaInterface < handle
             if toc(tStart) >= obj.maxWait
                 warning('Timeout while reading from Maxima process. Expression IDs may be out of sync.');
             end
-            if continued_output
-                warning('Output from Maxima was continued with a backslash. This may cause parsing issues. Output was: "%s"', strjoin(outputLines, newline));
+            if continued_output || list_output
+                warning('Continued output from Maxima (backslash or list) was not properly finished. This may cause parsing issues. Output was: "%s"', strjoin(outputLines, newline));
             end
             obj.nextId = lastSeenIn;
         end

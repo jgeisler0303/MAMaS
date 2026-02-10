@@ -906,10 +906,12 @@ classdef msym < handle
                         error('All sym arguments must belong to the same Maxima instance.');
                     end
                 end
+                idStrs = arrayfun(@(e) e.identifier, x(:), 'UniformOutput', false);
+            else
+                idStrs = {x.identifier};
             end
             
             % Use Maxima's listofvars() to get list of variables
-            idStrs = arrayfun(@(e) e.identifier, x(:), 'UniformOutput', false);
             idList = strjoin(idStrs, ', ');
             cmd = ['listofvars([', idList, '])'];
             x(1).validateMaximaInstance();
