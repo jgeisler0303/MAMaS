@@ -146,27 +146,22 @@ classdef MaximaInterface < handle
     end
 
     methods (Static)
-        function obj = getInstance(maxWait, transcript_file)
+        function obj = getInstance(maxWait, transcript_file, restart)
             arguments
                 maxWait (1,1) double {mustBePositive} = 10.0
                 transcript_file = ''
+                restart = false
             end
 
             % Singleton accessor
             persistent instance
             if isempty(instance) || ~isvalid(instance)
                 instance = MaximaInterface(maxWait, transcript_file);
+            elseif restart
+                delete(instance);
+                instance = MaximaInterface(maxWait, transcript_file);
             end
             obj = instance;
-        end
-
-        function stopInstance()
-            % Stop and clear the singleton instance
-            persistent instance
-            if ~isempty(instance) && isvalid(instance)
-                delete(instance);
-            end
-            instance = [];
         end
     end
 
